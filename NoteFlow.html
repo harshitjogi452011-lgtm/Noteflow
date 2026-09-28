@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#6c5ce7">
+<title>NoteFlow — Notes to Video</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f5f6fb;color:#171725}
+header{background:linear-gradient(135deg,#6c5ce7,#8e7dff);color:white;padding:18px 16px 22px;position:sticky;top:0;z-index:5}
+.head{max-width:1000px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:10px}.brand{font-size:23px;font-weight:800}.tag{font-size:12px;opacity:.85}
+.wrap{max-width:1000px;margin:auto;padding:16px}.grid{display:grid;grid-template-columns:280px 1fr;gap:16px}
+.card{background:white;border-radius:18px;padding:15px;box-shadow:0 5px 20px #20204012;margin-bottom:16px}
+button,.filebtn{border:0;border-radius:12px;padding:11px 14px;font-weight:700;cursor:pointer;background:#eeeef7;color:#27273a}
+.primary{background:#6c5ce7;color:white}.danger{background:#ffe9ed;color:#b4233c}.wide{width:100%}
+input,textarea,select{width:100%;border:1px solid #ddddec;border-radius:12px;padding:12px;font:inherit;outline:none;background:#fff}
+input:focus,textarea:focus{border-color:#6c5ce7;box-shadow:0 0 0 3px #6c5ce720}
+textarea{min-height:300px;resize:vertical;line-height:1.6}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}
+.notes{display:flex;flex-direction:column;gap:8px;margin-top:12px}.noteitem{padding:11px;border:1px solid #e6e5f0;border-radius:12px;cursor:pointer}.noteitem.active{border-color:#6c5ce7;background:#f3f1ff}.noteitem b{display:block}.noteitem small{color:#777}
+h2,h3{margin:5px 0 12px}.muted{color:#707080;font-size:13px}
+.status{font-size:13px;color:#5145a5;min-height:20px;margin-top:8px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.preview{border-radius:14px;background:#10101a;color:white;min-height:180px;display:flex;align-items:center;justify-content:center;text-align:center;padding:25px}
+video{width:100%;border-radius:14px;margin-top:10px;background:#111}
+footer{text-align:center;color:#777;padding:20px;font-size:12px}
+@media(max-width:720px){.grid{grid-template-columns:1fr}.sidebar{order:2}.editor{order:1}header{position:relative}.head{align-items:flex-start}}
+</style>
+</head>
+<body>
+<header><div class="head"><div><div class="brand">📝 NoteFlow</div><div class="tag">Write • Receive • Share • Turn notes into video</div></div><button id="newBtn">＋ New Note</button></div></header>
+
+<main class="wrap">
+<div class="grid">
+<section class="sidebar">
+<div class="card">
+<h3>My Notes</h3>
+<div class="row"><button class="primary" id="newBtn2">＋ New</button><button id="importBtn">📥 Import</button></div>
+<input id="search" placeholder="Search notes…" style="margin-top:10px">
+<div class="notes" id="notesList"></div>
+<input type="file" id="fileInput" accept=".json" hidden>
+</div>
+<div class="card">
+<h3>How sharing works</h3>
+<div class="muted">Use <b>Share Link</b> to create a link containing the current note. Your friend can open it in Chrome and read/import it.</div>
+</div>
+</section>
+
+<section class="editor">
+<div class="card">
+<input id="title" placeholder="Note title" style="font-size:20px;font-weight:800;margin-bottom:10px">
+<div class="row">
+<select id="subject"><option>General</option><option>Maths</option><option>Science</option><option>English</option><option>Hindi</option><option>SST</option><option>Computer</option></select>
+<input id="author" placeholder="Your name (optional)">
+</div>
+<textarea id="content" placeholder="Write your notes here…"></textarea>
+<div class="actions">
+<button class="primary" id="saveBtn">💾 Save</button>
+<button id="shareBtn">🔗 Share Link</button>
+<button id="copyBtn">📋 Copy Text</button>
+<button id="exportBtn">📦 Export</button>
+<button class="danger" id="deleteBtn">🗑 Delete</button>
+</div>
+<div class="status" id="status"></div>
+</div>
+
+<div class="card">
+<h3>🎬 Notes → Video</h3>
+<div class="row">
+<select id="theme"><option value="purple">Purple</option><option value="dark">Dark</option><option value="blue">Blue</option></select>
+<select id="speed"><option value="2500">Normal</option><option value="4000">Slow</option><option value="1500">Fast</option></select>
+</div>
+<div class="preview" id="preview">Your note will appear here as video slides.</div>
+<div class="actions"><button class="primary" id="videoBtn">🎥 Generate Video</button><a id="downloadVideo" style="display:none" class="filebtn">⬇ Download Video</a></div>
+<video id="video" controls style="display:none"></video>
+<div class="muted">Video generation happens in your browser. Long notes are split into slides.</div>
+</div>
+</section>
+</div>
+<footer>NoteFlow • Works in modern Chrome • Notes are stored on this device unless you share/export them.</footer>
+</main>
+
+<script>
+const KEY='noteflow_notes_v1';
+let notes=JSON.parse(localStorage.getItem(KEY)||'[]');
+let currentId=null;
+
+const $=id=>document.getElementById(id);
+function saveAll(){localStorage.setItem(KEY,JSON.stringify(notes))}
+function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function setStatus(t){$('status').textContent=t;clearTimeout(window.st);window.st=setTimeout(()=>$('status').textContent='',3000)}
+function renderList(){
+ const q=$('search').value.toLowerCase();
+ $('notesList').innerHTML=notes.filter(n=>(n.title+' '+n.content).toLowerCase().includes(q)).map(n=>
+ `<div class="noteitem ${n.id===currentId?'active':''}" data-id="${n.id}">
+ <b>${esc(n.title||'Untitled')}</b><small>${esc(n.subject||'General')} • ${new Date(n.updated).toLocaleDateString()}</small></div>`).join('')||'<div class="muted">No notes yet.</div>';
+ document.querySelectorAll('.noteitem').forEach(x=>x.onclick=()=>loadNote(x.dataset.id));
+}
+function clearEditor(){currentId=null;$('title').value='';$('subject').value='General';$('author').value='';$('content').value='';renderList();updatePreview()}
+function newNote(){clearEditor();$('title').focus()}
+function loadNote(id){
+ const n=notes.find(x=>x.id===id);if(!n)return;
+ currentId=id;$('title').value=n.title;$('subject').value=n.subject;$('author').value=n.author||'';$('content').value=n.content;renderList();updatePreview()
+}
+function saveNote(){
+ const title=$('title').value.trim()||'Untitled Note', content=$('content').value;
+ if(!currentId){currentId=uid();notes.unshift({id:currentId,title,subject:$('subject').value,author:$('author').value,content,updated:Date.now()})}
+ else {let n=notes.find(x=>x.id===currentId);Object.assign(n,{title,subject:$('subject').value,author:$('author').value,content,updated:Date.now()})}
+ saveAll();renderList();setStatus('Saved ✓');updatePreview();
+}
+function getData(){return {title:$('title').value||'Untitled Note',subject:$('subject').value,author:$('author').value,content:$('content').value}}
+function encodeData(o){return btoa(unescape(encodeURIComponent(JSON.stringify(o))))}
+function decodeData(s){return JSON.parse(decodeURIComponent(escape(atob(s))))}
+function shareLink(){
+ saveNote();
+ const link=location.href.split('#')[0]+'#note='+encodeData(getData());
+ if(navigator.share) navigator.share({title:getData().title,text:'My notes from NoteFlow',url:link}).catch(()=>{});
+ else navigator.clipboard.writeText(link).then(()=>setStatus('Share link copied ✓'));
+}
+function copyText(){navigator.clipboard.writeText(`${$('title').value}\n\n${$('content').value}`).then(()=>setStatus('Text copied ✓'))}
+function exportNote(){
+ const blob=new Blob([JSON.stringify(getData(),null,2)],{type:'application/json'});
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(($('title').value||'note').replace(/[^a-z0-9]+/gi,'-'))+'.json';a.click();URL.revokeObjectURL(a.href)
+}
+function importNote(file){
+ const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);currentId=uid();notes.unshift({id:currentId,...d,updated:Date.now()});saveAll();loadNote(currentId);setStatus('Note received/imported ✓')}catch{setStatus('Invalid note file')}};r.readAsText(file)
+}
+function updatePreview(){
+ const text=$('content').value.trim()||'Start writing your notes…';
+ const chunks=text.match(/.{1,180}(\s|$)/g)||[text];
+ $('preview').innerHTML='<div><h2>'+esc($('title').value||'My Notes')+'</h2><p>'+esc(chunks[0])+'</p></div>'
+}
+function drawSlide(ctx,w,h,title,body,theme){
+ const bg=theme==='dark'?'#11131c':theme==='blue'?'#174ea6':'#5b4ae8';ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);
+ ctx.fillStyle='rgba(255,255,255,.13)';ctx.fillRect(55,55,w-110,h-110);
+ ctx.fillStyle='#fff';ctx.font='bold 48px system-ui';ctx.fillText(title.slice(0,30),90,140);
+ ctx.font='28px system-ui';let words=body.split(/\s+/),line='',y=215;
+ for(const word of words){let test=line?line+' '+word:word;if(ctx.measureText(test).width>w-180){ctx.fillText(line,90,y);line=word;y+=44;if(y>h-100)break}else line=test}
+ if(line&&y<h-80)ctx.fillText(line,90,y);
+ ctx.font='18px system-ui';ctx.fillText('NoteFlow',90,h-65);
+}
+async function generateVideo(){
+ if(!window.MediaRecorder){setStatus('Your Chrome does not support video recording.');return}
+ const text=$('content').value.trim()||'No content';
+ const parts=text.match(/.{1,180}(\s|$)/g)||[text];
+ const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=720;
+ const ctx=canvas.getContext('2d');const stream=canvas.captureStream(30);
+ const rec=new MediaRecorder(stream,{mimeType:'video/webm'});let chunks=[];
+ rec.ondataavailable=e=>e.data.size&&chunks.push(e.data);
+ const done=new Promise(res=>rec.onstop=res);rec.start();
+ const delay=Number($('speed').value), title=$('title').value||'My Notes';
+ for(const p of parts){drawSlide(ctx,canvas.width,canvas.height,title,p,$('theme').value);await new Promise(r=>setTimeout(r,delay))}
+ rec.stop();await done;const blob=new Blob(chunks,{type:'video/webm'});const url=URL.createObjectURL(blob);
+ $('video').src=url;$('video').style.display='block';$('downloadVideo').style.display='inline-block';$('downloadVideo').href=url;$('downloadVideo').download=(title.replace(/[^a-z0-9]+/gi,'-')||'notes')+'.webm';setStatus('Video generated ✓')
+}
+$('newBtn').onclick=$('newBtn2').onclick=newNote;$('saveBtn').onclick=saveNote;$('shareBtn').onclick=shareLink;$('copyBtn').onclick=copyText;$('exportBtn').onclick=exportNote;$('deleteBtn').onclick=()=>{if(!currentId)return;notes=notes.filter(n=>n.id!==currentId);saveAll();newNote();setStatus('Deleted')};
+$('importBtn').onclick=()=>$('fileInput').click();$('fileInput').onchange=e=>e.target.files[0]&&importNote(e.target.files[0]);
+$('search').oninput=renderList;$('content').oninput=updatePreview;$('title').oninput=updatePreview;$('videoBtn').onclick=generateVideo;
+if(location.hash.startsWith('#note=')){try{const d=decodeData(location.hash.slice(6));currentId=uid();notes.unshift({id:currentId,...d,updated:Date.now()});saveAll();loadNote(currentId);history.replaceState(null,'',location.pathname+location.search);setStatus('Shared note received ✓')}catch{}}
+if(notes.length)loadNote(notes[0].id);else clearEditor();
+</script>
+</body>
+</html>
